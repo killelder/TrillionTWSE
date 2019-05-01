@@ -9,12 +9,14 @@ from bs4 import BeautifulSoup as bs
 import time
 import codecs
 import pandas as pd
-
+import json
 dirpath = os.path.join(os.path.dirname(__file__), "../../data/")
 sleeptime = 3
 
 def dictsortkeys(a):
-    ''' dict to list '''
+    """ 
+        dict to list 
+    """
     keys = a.keys()
     vals = []
     
@@ -24,6 +26,26 @@ def dictsortkeys(a):
     vals.sort()
     print(vals)
     return vals
+
+def check_last_date(number):
+    """
+        檢查data檔案內的最後更新日期
+    """
+    if os.path.exists(dirpath + "Price/" + str(number) + ".csv") == False:
+        return 1992, 0, 0
+    f = open(dirpath + "Price/" + str(number) + ".csv", "r")
+    f.readline()
+    year = 1992
+    mon = 0
+    day = 0
+    for buf in f:
+        buf2 = buf.split(",")
+        year = int(buf2[0].split("/")[0]) + 1911
+        mon =  int(buf2[0].split("/")[1])
+        day =  int(buf2[0].split("/")[2])
+    f.close()
+    print("last update day = ", year, mon, day)
+    return year,mon,day
 
 class misc_information():
     """
@@ -133,10 +155,14 @@ class misc_information():
            
             for buf2 in trs:
                 tds = buf2.findAll("td")
+                #print(len(tds))
                 if len(tds) < 4:
                     continue
                 powerdict[int(tds[0].text)] = [tds[1].text,tds[2].text,tds[3].text]
                 if len(tds) < 8:
+                    continue
+                #print(tds[4].text)
+                if "\n" in tds[4].text:
                     continue
                 powerdict[int(tds[4].text)] = [tds[5].text,tds[6].text,tds[7].text]
         
@@ -165,9 +191,159 @@ class misc_information():
 class Stock_daily():
     def __init__(self):
         pass
-        
+    
+    def load_list(self):
+        """
+            load stock list
+            load otc list
+        """
+        stock_list = []
+        oct_list = []
+        f = open(dirpath + "stocklist.csv", "r")
+        f.readline()
+        for buf in f:
+            buf2 = buf.replace("\n","").split(",")
+            if "上市" in buf2[2]:
+                stock_list.append(int(buf2[0]))
+            if "上櫃" in buf2[2]:
+                oct_list.append(int(buf2[0]))
+        f.close()
+        return stock_list, oct_list
+
     def download(self):
-        pass
+        """
+            更新所有股價, 除權息資訊
+        """
+        stock_list, oct_list = self.load_list()
+        for num in stock_list:
+            self.download_stock(num, False,False)
+            #if datetime.date.today().weekday() == 5 or datetime.date.today().weekday() == 6:
+            #    self.download_adj_close(num)
+        #    
+        for num in oct_list:
+            self.download_stock(num, True,False)
+            #if datetime.date.today().weekday() == 5 or datetime.date.today().weekday() == 6:
+            #    self.download_adj_close(num)
+
+    def download_stock(self, number, isotc, forceupdate=False):
+        """
+            下載上市櫃股票專用
+        """
+        print("更新代碼 : " + str(number))
+    
+        #給定更新起始年月日
+        yearstart, monstart, daystart = check_last_date(number)
+        this_year = int(time.strftime("%Y"))+1 #+1是為了for迴圈連今年也要跑
+        toyr, tomon = time.localtime(time.time()).tm_year, time.localtime(time.time()).tm_mon
+        
+        waitt = 3
+        if forceupdate:
+            yearstart, monstart, daystart = 1992, 0, 0
+            waitt = 0.3 #這時候時間可以比較短, 因為真正有update東西的時候, 會有比較長的休息時間
+            
+        if forceupdate:
+            f = open(dirpath + "Price/" + str(number) + ".csv", "w")
+            f.write("time,open,high,low,close,turnover,volume\n")
+        else:
+            if os.path.exists(dirpath + "Price/" + str(number) + ".csv") == False:
+                f = open(dirpath + "Price/" + str(number) + ".csv", "a")
+                f.write("time,open,high,low,close,turnover,volume\n")
+            else:
+                f = open(dirpath + "Price/" + str(number) + ".csv", "a")
+        
+        #更新上市股票
+        if isotc == False:
+            for year in range(1992, this_year):
+                if year < yearstart:
+                    continue
+                for mon in range(1, 13):                
+                    if year <= yearstart and mon < monstart:
+                        continue
+                    monstr = ""
+                    if mon < 10:
+                        monstr = "0" + str(mon)
+                    else:
+                        monstr = str(mon)
+                    
+                    if (year > toyr) or (year == toyr and mon > tomon):
+                        continue
+                    print(year, mon)
+                    delayt = 1
+                    try:
+                        r = requests.get("http://www.tse.com.tw/exchangeReport/STOCK_DAY?response=json&date=" + str(year) + monstr + "01" "&stockNo=" + str(number))#, auth=('user', 'pass'))
+                        print("http://www.tse.com.tw/exchangeReport/STOCK_DAY?response=json&date=" + str(year) + monstr + "01" "&stockNo=" + str(number))
+                        stockdata = json.loads(r.text)
+                        time.sleep(waitt)
+                    except:
+                        while True:
+                            print ("except!!! no OK")
+                            time.sleep(delayt)
+                            try:
+                                r = requests.get("http://www.tse.com.tw/exchangeReport/STOCK_DAY?response=json&date=" + str(year) + monstr + "01" "&stockNo=" + str(number))#, auth=('user', 'pass'))
+                                stockdata = json.loads(r.text)
+                                break
+                            except:
+                                delayt = delayt + 1
+                            finally:
+                                if delayt >= 11:
+                                    break
+                    finally:
+                        #"0日期","1成交股數","2成交金額","3開盤價","4最高價","5最低價","6收盤價","7漲跌價差","8成交筆數"
+                        if "OK" == stockdata["stat"]:
+                            for i in range(0, len(stockdata["data"])):
+                                if year <= yearstart and mon <= monstart and int(stockdata["data"][i][0].split("/")[2]) <= daystart:
+                                    continue
+                                f.write(stockdata["data"][i][0].replace(",","") + "," + stockdata["data"][i][3].replace(",","") + "," + stockdata["data"][i][4].replace(",","") + "," + stockdata["data"][i][5].replace(",","") + "," + stockdata["data"][i][6].replace(",","") + "," + stockdata["data"][i][8].replace(",","")  + "," + stockdata["data"][i][1].replace(",","") + "\n")
+                        else:
+                            print ("ERROR no OK")
+        #更新上櫃股票
+        else:
+            for year in range(2000, this_year):
+                twyear = year - 1911
+                if year < yearstart:
+                    continue
+                #print (year)
+                for mon in range(1, 13):                
+                    if year <= yearstart and mon < monstart:
+                        continue
+                    monstr = ""
+                    if mon < 10:
+                        monstr = "0" + str(mon)
+                    else:
+                        monstr = str(mon)
+                    print(year, mon, toyr, tomon)
+                    if (year > toyr) or (year == toyr and mon > tomon):
+                        continue
+                    
+                    delayt = 1
+                    try:
+                        r = requests.get("http://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?l=zh-tw&d=" + str(twyear) + "/" + monstr + "&stkno=" + str(number))#, auth=('user', 'pass'))
+                        print("http://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?l=zh-tw&d=" + str(twyear) + "/" + monstr + "&stkno=" + str(number))
+                        stockdata = json.loads(r.text)                    
+                        time.sleep(waitt)
+                    except:
+                        while True:
+                            print ("except!!! no OK")
+                            time.sleep(delayt)
+                            try:
+                                r = requests.get("http://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?l=zh-tw&d=" + str(twyear) + "/" + monstr + "&stkno=" + str(number))#, auth=('user', 'pass'))
+                                stockdata = json.loads(r.text)                    
+                                break
+                            except:
+                                delayt = delayt + 1
+                            finally:
+                                if delayt >= 11:
+                                    break
+                    finally:
+                        #print(stockdata["aaData"]) 0: date, 1: Vol, 3:Open, 4: H, 5: L, 6: C 8: Turnover
+                        if int(stockdata["iTotalRecords"]) > 0:
+                            for i in range(0, len(stockdata["aaData"])):
+                                if year <= yearstart and mon <= monstart and int(stockdata["aaData"][i][0].replace("＊","").split("/")[2]) <= daystart:
+                                    continue
+                                f.write(stockdata["aaData"][i][0].replace("＊","").replace(",","") + "," + stockdata["aaData"][i][3].replace(",","") + "," + stockdata["aaData"][i][4].replace(",","") + "," + stockdata["aaData"][i][5].replace(",","") + "," + stockdata["aaData"][i][6].replace(",","") + "," + stockdata["aaData"][i][8].replace(",","") + "," + stockdata["aaData"][i][1].replace(",","") + "\n")
+                        else:
+                            print ("ERROR no OK")
+        f.close()
         
 class Lottery():
     def __init__(self):
@@ -202,7 +378,7 @@ class Lottery():
             soup = bs(res.text)
             msg = soup.findAll("body")[0].text
             buf = yaml.safe_load(msg)
-            
+            print(buf)
             with open(dirpath + "Lottery/" + str(year) + ".yaml", 'w') as outfile:
                 yaml.dump(buf, outfile, allow_unicode=True)
         
