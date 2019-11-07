@@ -40,7 +40,7 @@ def check_last_date(number):
     day = 0
     for buf in f:
         buf2 = buf.split(",")
-        year = int(buf2[0].split("/")[0]) + 1911
+        year = int(buf2[0].split("/")[0])
         mon =  int(buf2[0].split("/")[1])
         day =  int(buf2[0].split("/")[2])
     f.close()
@@ -225,6 +225,35 @@ class Stock_daily():
             #if datetime.date.today().weekday() == 5 or datetime.date.today().weekday() == 6:
             #    self.download_adj_close(num)
 
+    def changetoADall(self):
+        stock_list, oct_list = self.load_list()
+        for num in stock_list:
+            self.changetoAD(num)
+            
+        for num in oct_list:
+            self.changetoAD(num)
+            
+    def changetoAD(self, number):
+        if os.path.exists(dirpath + "Price/" + str(number) + ".csv") == False:
+            return 0 
+        f = open(dirpath + "Price/" + str(number) + ".csv", "r")
+        text = ""
+        text = text + f.readline()
+        for buf in f:
+            buf2 = buf.split(",")[0].split("/")
+            buf3 = buf.split(",")
+            if int(buf2[0]) >= 1911:
+                break
+            else:
+                text = text + str(int(buf2[0]) + 1911) + "/" + buf2[1] + "/" + buf2[2] + "," + buf3[1] + "," + buf3[2] + "," + buf3[3] + "," + buf3[4] + "," + buf3[5] + "," + buf3[6]
+        if len(text) < 100:
+            f.close()
+        else:
+            f.close()
+            f = open(dirpath + "Price/" + str(number) + ".csv", "w")
+            f.write(text)
+            f.close()
+
     def download_stock(self, number, isotc, forceupdate=False):
         """
             下載上市櫃股票專用
@@ -293,7 +322,7 @@ class Stock_daily():
                             for i in range(0, len(stockdata["data"])):
                                 if year <= yearstart and mon <= monstart and int(stockdata["data"][i][0].split("/")[2]) <= daystart:
                                     continue
-                                f.write(stockdata["data"][i][0].replace(",","") + "," + stockdata["data"][i][3].replace(",","") + "," + stockdata["data"][i][4].replace(",","") + "," + stockdata["data"][i][5].replace(",","") + "," + stockdata["data"][i][6].replace(",","") + "," + stockdata["data"][i][8].replace(",","")  + "," + stockdata["data"][i][1].replace(",","") + "\n")
+                                f.write(str(int(stockdata["data"][i][0].replace(",","").split("/")[0]) + 1911) + "/" + stockdata["data"][i][0].replace(",","").split("/")[1] + "/" + stockdata["data"][i][0].replace(",","").split("/")[2] + "," + stockdata["data"][i][3].replace(",","") + "," + stockdata["data"][i][4].replace(",","") + "," + stockdata["data"][i][5].replace(",","") + "," + stockdata["data"][i][6].replace(",","") + "," + stockdata["data"][i][8].replace(",","")  + "," + stockdata["data"][i][1].replace(",","") + "\n")
                         else:
                             print ("ERROR no OK")
         #更新上櫃股票
@@ -340,7 +369,7 @@ class Stock_daily():
                             for i in range(0, len(stockdata["aaData"])):
                                 if year <= yearstart and mon <= monstart and int(stockdata["aaData"][i][0].replace("＊","").split("/")[2]) <= daystart:
                                     continue
-                                f.write(stockdata["aaData"][i][0].replace("＊","").replace(",","") + "," + stockdata["aaData"][i][3].replace(",","") + "," + stockdata["aaData"][i][4].replace(",","") + "," + stockdata["aaData"][i][5].replace(",","") + "," + stockdata["aaData"][i][6].replace(",","") + "," + stockdata["aaData"][i][8].replace(",","") + "," + stockdata["aaData"][i][1].replace(",","") + "\n")
+                                f.write(str(int(stockdata["aaData"][i][0].replace("＊","").replace(",","").split("/")[0])+1911) + "/" + stockdata["aaData"][i][0].replace("＊","").replace(",","").split("/")[1] + "/" + stockdata["aaData"][i][0].replace("＊","").replace(",","").split("/")[2] + "," + stockdata["aaData"][i][3].replace(",","") + "," + stockdata["aaData"][i][4].replace(",","") + "," + stockdata["aaData"][i][5].replace(",","") + "," + stockdata["aaData"][i][6].replace(",","") + "," + stockdata["aaData"][i][8].replace(",","") + "," + stockdata["aaData"][i][1].replace(",","") + "\n")
                         else:
                             print ("ERROR no OK")
         f.close()
